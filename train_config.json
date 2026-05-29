@@ -1,0 +1,40 @@
+{
+    "exp": {
+        "exp_no": "001",
+        "exp_name": "multimodal_baseline",
+        "seed": 0
+    },
+    "data": {
+        "csv_train": "D:/玛卡巴卡/MATERIALS/22spring/EchoRisk竞赛/Dataset/Task1/labels/task1_train.csv",
+        "csv_test": null,
+        "dicom_root": "D:/玛卡巴卡/MATERIALS/22spring/EchoRisk竞赛/Dataset/Task1/dicom/train",
+        "frames": 32,
+        "frequency": 2,
+        "resize": 224,
+        "train_split_ratio": 0.8
+    },
+    "model": {
+        "model_name": "uniformer_small",
+        "pretrained": false,
+        "weights": null
+    },
+    "training": {
+        "epochs": 45,
+        "batch_size": 8,
+        "num_workers": 4,
+        "modal_dropout": 0.15
+    },
+    "optimization": {
+        "optimizer_name": "adamW",
+        "lr": 1e-4,
+        "weight_decay": 1e-4,
+        "lr_scheduler": "step",
+        "lr_step_period": 15
+    },
+    "device": {
+        "device": null
+    },
+    "output": {
+        "output": null
+    }
+}

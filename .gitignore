@@ -1,0 +1,70 @@
+# ===== IDE =====
+# PyCharm
+.idea/
+*.iml
+
+# VSCode
+.vscode/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+*.manifest
+*.spec
+
+# ===== Jupyter Notebook =====
+.ipynb_checkpoints/
+*.ipynb
+
+# ===== DICOM & Medical Data =====
+*.dcm
+**/dicom/
+
+# ===== Dataset & Labels =====
+# Uncomment to ignore downloaded datasets
+# data/
+# labels/
+# *.csv
+
+# ===== Model Checkpoints =====
+*.pth
+*.pt
+checkpoints/
+output/
+logs/
+runs/
+
+# ===== Large Files =====
+*.7z*
+*.zip
+*.tar
+*.tar.gz
+
+# ===== OS Files =====
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ===== Environment & Secrets =====
+.env
+.env.*
+*.key
+
+# ===== Other =====
+*.log
+*.tmp
+_temp/

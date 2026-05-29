@@ -1,0 +1,32 @@
+{
+    "exp": {
+        "exp_name": "multimodal_eval",
+        "seed": 0
+    },
+    "data": {
+        "csv_test": "D:/玛卡巴卡/MATERIALS/22spring/EchoRisk竞赛/Dataset/Task1/labels/task1_val.csv",
+        "dicom_root": "D:/玛卡巴卡/MATERIALS/22spring/EchoRisk竞赛/Dataset/Task1/dicom/val",
+        "frames": 32,
+        "frequency": 2,
+        "resize": 224,
+        "mean": null,
+        "std": null
+    },
+    "model": {
+        "model_name": "uniformer_small",
+        "checkpoint": null
+    },
+    "eval": {
+        "batch_size": 8,
+        "num_workers": 4,
+        "bootstrap_samples": 10000,
+        "save_predictions": true,
+        "save_plot": true
+    },
+    "device": {
+        "device": null
+    },
+    "output": {
+        "output_dir": null
+    }
+}
