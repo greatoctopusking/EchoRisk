@@ -55,14 +55,14 @@ def get_model(model_name, args):
         model = uniformer_small()
         if args.pretrained and args.weights is not None:
             state_dict = torch.load(args.weights, map_location='cpu', weights_only=True)
-            model.load_state_dict(state_dict)
+            model.load_state_dict(state_dict, strict=False)
         model.head = torch.nn.Linear(in_features=model.head.in_features, out_features=1)
         model.head.bias.data[0] = 55.6
     elif model_name == "uniformer_base":
         model = uniformer_base()
         if args.pretrained and args.weights is not None:
             state_dict = torch.load(args.weights, map_location='cpu', weights_only=True)
-            model.load_state_dict(state_dict)
+            model.load_state_dict(state_dict, strict=False)
         model.head = torch.nn.Linear(in_features=model.head.in_features, out_features=1)
         model.head.bias.data[0] = 55.6
     else:

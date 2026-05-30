@@ -32,7 +32,7 @@ class MultiModalEchoCoTr(nn.Module):
 
         if pretrained and weights is not None:
             state_dict = torch.load(weights, map_location='cpu', weights_only=True)
-            self.encoder.load_state_dict(state_dict)
+            self.encoder.load_state_dict(state_dict, strict=False)
 
         encoder_dim = self.encoder.embed_dim[-1]
         self.encoder.head = nn.Identity()
