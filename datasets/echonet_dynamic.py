@@ -157,7 +157,9 @@ class EchoNet(torchvision.datasets.VisionDataset):
         if not os.path.exists(path):
             raise FileNotFoundError(path)
 
-        capture = cv2.VideoCapture(path)
+        capture = cv2.VideoCapture(path, cv2.CAP_FFMPEG)
+        if not capture.isOpened():
+            capture = cv2.VideoCapture(path)
 
         count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))

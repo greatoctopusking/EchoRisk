@@ -1,7 +1,7 @@
 {
     "exp": {
-        "exp_no": "002",
-        "exp_name": "phase2_gated",
+        "exp_no": "003",
+        "exp_name": "phase2_fusionblock",
         "seed": 0
     },
     "data": {
@@ -19,12 +19,12 @@
         "pretrained": false,
         "weights": null,
         "freeze_encoder_stages": 3,
-        "fusion_type": "gated",
+        "fusion_type": "fusionblock",
         "echonet_weights": "output/echonet_pretrain/encoder.pt"
     },
     "training": {
         "epochs": 20,
-        "batch_size": 32,
+        "batch_size": 16,
         "num_workers": 4,
         "modal_dropout": 0
     },
@@ -39,6 +39,6 @@
         "device": null
     },
     "output": {
-        "output": "output/phase2_gated"
+        "output": "output/phase2_fusionblock"
     }
 }

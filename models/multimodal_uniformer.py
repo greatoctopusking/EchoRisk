@@ -7,8 +7,21 @@ from models.uniformer import uniformer_small, uniformer_base
 from models.uniformer import conv_3x3x3, Attention, Mlp
 
 
+class GatedFusion(nn.Module):
+    def __init__(self, dim=512):
+        super().__init__()
+        self.gate = nn.Linear(dim * 2, 2)
+
+    def forward(self, f_a4c, f_a2c, a4c_mask, a2c_mask):
+        w = self.gate(torch.cat([f_a4c, f_a2c], dim=-1))
+        w = w.softmax(dim=-1)
+        w = w * torch.stack([a4c_mask.float(), a2c_mask.float()], dim=-1)
+        w = w / (w.sum(dim=-1, keepdim=True) + 1e-8)
+        return w[:, 0:1] * f_a4c + w[:, 1:2] * f_a2c
+
+
 class FusionBlock(nn.Module):
-    def __init__(self, dim, num_heads=8, mlp_ratio=2., drop_path=0.1):
+    def __init__(self, dim, num_heads=4, mlp_ratio=1., drop_path=0.3):
         super().__init__()
         self.pos_embed = conv_3x3x3(dim, dim, groups=dim)
         self.norm1 = nn.LayerNorm(dim)
@@ -30,9 +43,10 @@ class FusionBlock(nn.Module):
 
 class MultiModalEchoCoTr(nn.Module):
     def __init__(self, model_name='uniformer_small', pretrained=True, weights=None,
-                 freeze_encoder_stages=0):
+                 freeze_encoder_stages=0, fusion_type='gated', echonet_weights=None):
         super().__init__()
         self.model_name = model_name
+        self.fusion_type = fusion_type
 
         if model_name == 'uniformer_small':
             self.encoder = uniformer_small()
@@ -41,49 +55,57 @@ class MultiModalEchoCoTr(nn.Module):
         else:
             raise ValueError(f"Unknown model_name: {model_name}")
 
-        if pretrained and weights is not None:
-            print(f"[Pretrain] Loading weights from: {weights}")
-            if not os.path.exists(weights):
-                print(f"[Pretrain] WARNING: file not found: {weights}")
-            else:
-                file_size_mb = os.path.getsize(weights) / (1024 * 1024)
-                print(f"[Pretrain] File exists, size: {file_size_mb:.1f} MB")
-            state_dict = torch.load(weights, map_location='cpu', weights_only=True)
-            print(f"[Pretrain] State dict has {len(state_dict)} keys")
-            result = self.encoder.load_state_dict(state_dict, strict=False)
-            if result.missing_keys:
-                print(f"[Pretrain] Missing keys ({len(result.missing_keys)}): {result.missing_keys[:5]}...")
-            if result.unexpected_keys:
-                print(f"[Pretrain] Unexpected keys ({len(result.unexpected_keys)}): {result.unexpected_keys[:5]}...")
-            loaded = len(state_dict) - len(result.unexpected_keys) - len(result.missing_keys)
-            print(f"[Pretrain] Loaded {loaded}/{len(state_dict)} keys "
-                  f"({len(result.missing_keys)} missing, {len(result.unexpected_keys)} unexpected)")
-        elif pretrained:
-            print("[Pretrain] pretrained=True but weights is None. Training from scratch.")
-        else:
-            print("[Pretrain] pretrained=False. Training from scratch.")
-
         encoder_dim = self.encoder.embed_dim[-1]
         self.encoder.head = nn.Identity()
 
+        if echonet_weights is not None:
+            print(f"[Encoder] Loading EchoNet-pretrained encoder from: {echonet_weights}")
+            enc_state = torch.load(echonet_weights, map_location='cpu', weights_only=True)
+            self.encoder.load_state_dict(enc_state, strict=False)
+        elif pretrained and weights is not None:
+            print(f"[Encoder] Loading K400 weights from: {weights}")
+            if not os.path.exists(weights):
+                print(f"[Encoder] WARNING: file not found: {weights}")
+            else:
+                file_size_mb = os.path.getsize(weights) / (1024 * 1024)
+                print(f"[Encoder] File exists, size: {file_size_mb:.1f} MB")
+            state_dict = torch.load(weights, map_location='cpu', weights_only=True)
+            print(f"[Encoder] State dict has {len(state_dict)} keys")
+            result = self.encoder.load_state_dict(state_dict, strict=False)
+            loaded = len(state_dict) - len(result.unexpected_keys) - len(result.missing_keys)
+            print(f"[Encoder] Loaded {loaded}/{len(state_dict)} keys "
+                  f"({len(result.missing_keys)} missing, {len(result.unexpected_keys)} unexpected)")
+        elif pretrained:
+            print("[Encoder] pretrained=True but no weights provided. Training from scratch.")
+        else:
+            print("[Encoder] pretrained=False. Training from scratch.")
+
         self._freeze_stages(freeze_encoder_stages)
 
-        self.concat_proj = nn.Conv3d(encoder_dim * 2, encoder_dim, 1)
-
-        self.fusion_blocks = nn.ModuleList([
-            FusionBlock(dim=encoder_dim, num_heads=8, mlp_ratio=2., drop_path=0.1),
-            FusionBlock(dim=encoder_dim, num_heads=8, mlp_ratio=2., drop_path=0.1),
-        ])
-
-        self.head = nn.Sequential(
-            nn.Linear(encoder_dim, 128),
-            nn.GELU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 1),
-        )
-        self.head[-1].bias.data[0] = 55.6
-
         self.null_emb = nn.Parameter(torch.zeros(1, encoder_dim))
+
+        if fusion_type == 'gated':
+            self.fusion = GatedFusion(dim=encoder_dim)
+            self.head = nn.Linear(encoder_dim, 1)
+            self.head.bias.data[0] = 55.6
+            print("[Fusion] Using GatedFusion (2.5K params)")
+
+        elif fusion_type == 'fusionblock':
+            self.concat_proj = nn.Conv3d(encoder_dim * 2, encoder_dim, 1)
+            self.fusion_blocks = nn.ModuleList([
+                FusionBlock(dim=encoder_dim, num_heads=4, mlp_ratio=1., drop_path=0.3),
+            ])
+            self.head = nn.Sequential(
+                nn.Linear(encoder_dim, 128),
+                nn.GELU(),
+                nn.Dropout(0.3),
+                nn.Linear(128, 1),
+            )
+            self.head[-1].bias.data[0] = 55.6
+            print("[Fusion] Using FusionBlock (1 block, ~1.2M params)")
+
+        else:
+            raise ValueError(f"Unknown fusion_type: {fusion_type}")
 
     def _freeze_stages(self, num_stages):
         if num_stages < 1:
@@ -109,19 +131,25 @@ class MultiModalEchoCoTr(nn.Module):
     def forward(self, a4c_video, a2c_video, a4c_mask, a2c_mask):
         batch_size = a4c_video.shape[0]
 
-        f_a4c = self.encoder.forward_features(a4c_video)
-        f_a2c = self.encoder.forward_features(a2c_video)
+        if self.fusion_type == 'gated':
+            f_a4c = self.encoder(a4c_video).view(batch_size, -1)
+            f_a2c = self.encoder(a2c_video).view(batch_size, -1)
+            null = self.null_emb.expand(batch_size, -1)
+            f_a4c = torch.where(a4c_mask.unsqueeze(-1), f_a4c, null)
+            f_a2c = torch.where(a2c_mask.unsqueeze(-1), f_a2c, null)
+            fused = self.fusion(f_a4c, f_a2c, a4c_mask, a2c_mask)
+            return self.head(fused).squeeze(-1)
 
-        _, _, T, H, W = f_a4c.shape
-        null_map = self.null_emb.reshape(1, -1, 1, 1, 1).expand(batch_size, -1, T, H, W)
-        f_a4c = torch.where(a4c_mask.view(-1, 1, 1, 1, 1), f_a4c, null_map)
-        f_a2c = torch.where(a2c_mask.view(-1, 1, 1, 1, 1), f_a2c, null_map)
-
-        x = torch.cat([f_a4c, f_a2c], dim=1)
-        x = self.concat_proj(x)
-
-        for blk in self.fusion_blocks:
-            x = blk(x)
-
-        x = x.flatten(2).mean(-1)
-        return self.head(x).squeeze(-1)
+        elif self.fusion_type == 'fusionblock':
+            f_a4c = self.encoder.forward_features(a4c_video)
+            f_a2c = self.encoder.forward_features(a2c_video)
+            _, _, T, H, W = f_a4c.shape
+            null_map = self.null_emb.reshape(1, -1, 1, 1, 1).expand(batch_size, -1, T, H, W)
+            f_a4c = torch.where(a4c_mask.view(-1, 1, 1, 1, 1), f_a4c, null_map)
+            f_a2c = torch.where(a2c_mask.view(-1, 1, 1, 1, 1), f_a2c, null_map)
+            x = torch.cat([f_a4c, f_a2c], dim=1)
+            x = self.concat_proj(x)
+            for blk in self.fusion_blocks:
+                x = blk(x)
+            x = x.flatten(2).mean(-1)
+            return self.head(x).squeeze(-1)
