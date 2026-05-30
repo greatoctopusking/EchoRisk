@@ -1,23 +1,31 @@
 import os
 import torch
 import torch.nn as nn
+from timm.layers import DropPath
 
 from models.uniformer import uniformer_small, uniformer_base
+from models.uniformer import conv_3x3x3, Attention, Mlp
 
 
-class MLPFusion(nn.Module):
-    def __init__(self, dim=512, hidden_dim=128, dropout=0.3):
+class FusionBlock(nn.Module):
+    def __init__(self, dim, num_heads=8, mlp_ratio=2., drop_path=0.1):
         super().__init__()
-        self.fc1 = nn.Linear(dim * 2, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, 1)
-        self.act = nn.GELU()
-        self.drop = nn.Dropout(dropout)
-        self.fc2.bias.data[0] = 55.6
+        self.pos_embed = conv_3x3x3(dim, dim, groups=dim)
+        self.norm1 = nn.LayerNorm(dim)
+        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=True)
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = nn.LayerNorm(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, drop=0.1)
 
-    def forward(self, f_a4c, f_a2c):
-        x = torch.cat([f_a4c, f_a2c], dim=-1)
-        x = self.drop(self.act(self.fc1(x)))
-        return self.fc2(x).squeeze(-1)
+    def forward(self, x):
+        x = x + self.pos_embed(x)
+        B, C, T, H, W = x.shape
+        x = x.flatten(2).transpose(1, 2)
+        x = x + self.drop_path(self.attn(self.norm1(x)))
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        x = x.transpose(1, 2).reshape(B, C, T, H, W)
+        return x
 
 
 class MultiModalEchoCoTr(nn.Module):
@@ -60,7 +68,20 @@ class MultiModalEchoCoTr(nn.Module):
 
         self._freeze_stages(freeze_encoder_stages)
 
-        self.fusion = MLPFusion(dim=encoder_dim)
+        self.concat_proj = nn.Conv3d(encoder_dim * 2, encoder_dim, 1)
+
+        self.fusion_blocks = nn.ModuleList([
+            FusionBlock(dim=encoder_dim, num_heads=8, mlp_ratio=2., drop_path=0.1),
+            FusionBlock(dim=encoder_dim, num_heads=8, mlp_ratio=2., drop_path=0.1),
+        ])
+
+        self.head = nn.Sequential(
+            nn.Linear(encoder_dim, 128),
+            nn.GELU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, 1),
+        )
+        self.head[-1].bias.data[0] = 55.6
 
         self.null_emb = nn.Parameter(torch.zeros(1, encoder_dim))
 
@@ -88,11 +109,19 @@ class MultiModalEchoCoTr(nn.Module):
     def forward(self, a4c_video, a2c_video, a4c_mask, a2c_mask):
         batch_size = a4c_video.shape[0]
 
-        f_a4c = self.encoder(a4c_video).view(batch_size, -1)
-        f_a2c = self.encoder(a2c_video).view(batch_size, -1)
+        f_a4c = self.encoder.forward_features(a4c_video)
+        f_a2c = self.encoder.forward_features(a2c_video)
 
-        null = self.null_emb.expand(batch_size, -1)
-        f_a4c = torch.where(a4c_mask.unsqueeze(-1), f_a4c, null)
-        f_a2c = torch.where(a2c_mask.unsqueeze(-1), f_a2c, null)
+        _, _, T, H, W = f_a4c.shape
+        null_map = self.null_emb.reshape(1, -1, 1, 1, 1).expand(batch_size, -1, T, H, W)
+        f_a4c = torch.where(a4c_mask.view(-1, 1, 1, 1, 1), f_a4c, null_map)
+        f_a2c = torch.where(a2c_mask.view(-1, 1, 1, 1, 1), f_a2c, null_map)
 
-        return self.fusion(f_a4c, f_a2c)
+        x = torch.cat([f_a4c, f_a2c], dim=1)
+        x = self.concat_proj(x)
+
+        for blk in self.fusion_blocks:
+            x = blk(x)
+
+        x = x.flatten(2).mean(-1)
+        return self.head(x).squeeze(-1)

@@ -18,20 +18,20 @@
         "model_name": "uniformer_small",
         "pretrained": false,
         "weights": null,
-        "freeze_encoder_stages": 3
+        "freeze_encoder_stages": 0
     },
     "training": {
-        "epochs": 45,
+        "epochs": 30,
         "batch_size": 8,
         "num_workers": 4,
-        "modal_dropout": 0.15
+        "modal_dropout": 0
     },
     "optimization": {
         "optimizer_name": "adamW",
-        "lr": 1e-4,
+        "lr": 5e-5,
         "weight_decay": 5e-4,
         "lr_scheduler": "step",
-        "lr_step_period": 15
+        "lr_step_period": 10
     },
     "device": {
         "device": null
