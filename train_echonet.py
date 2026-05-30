@@ -1,4 +1,6 @@
 import os
+os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
+
 import json
 import argparse
 import time

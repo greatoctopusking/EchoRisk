@@ -1,5 +1,6 @@
 import math
 import os
+os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
 import time
 import random
 
