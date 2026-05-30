@@ -120,7 +120,7 @@ def run_epoch(model, dataloader, train, optimizer, device, modal_dropout=0.0):
 
     total_loss, samples = 0, 0
     y, yhat = [], []
-    scaler = torch.cuda.amp.GradScaler(enabled=train)
+    scaler = torch.amp.GradScaler('cuda', enabled=train)
 
     with torch.set_grad_enabled(train):
         with tqdm.tqdm(total=len(dataloader)) as progressbar:
@@ -156,13 +156,12 @@ def run_epoch(model, dataloader, train, optimizer, device, modal_dropout=0.0):
                     mask_a4c = a4c_mask
                     mask_a2c = a2c_mask
 
-                with torch.cuda.amp.autocast(enabled=train):
+                with torch.amp.autocast('cuda', enabled=train):
                     outputs = model(a4c_video, a2c_video, mask_a4c, mask_a2c)
+                    loss = torch.nn.functional.mse_loss(outputs.view(-1), ef)
 
                 y.append(ef.cpu().numpy())
                 yhat.append(outputs.view(-1).to("cpu").detach().numpy())
-
-                loss = torch.nn.functional.mse_loss(outputs.view(-1), ef)
 
                 if train:
                     optimizer.zero_grad()
