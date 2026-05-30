@@ -348,7 +348,7 @@ class Uniformer(nn.Module):
 def uniformer_small():
     return Uniformer(
         depth=[3, 4, 8, 3], embed_dim=[64, 128, 320, 512],
-        head_dim=64, drop_rate=0.1, split=True)
+        head_dim=64, drop_rate=0.1, split=False)
 
 def uniformer_base():
     return Uniformer(
