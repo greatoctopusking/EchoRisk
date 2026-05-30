@@ -44,6 +44,8 @@ class EchoNet(torchvision.datasets.VisionDataset):
 
         self.filter_videos()
 
+        self._validate_readable()
+
         print("{} dataset size: {}".format(split, len(self.vnames)))
 
     def read_filelist(self):
@@ -157,22 +159,43 @@ class EchoNet(torchvision.datasets.VisionDataset):
         if not os.path.exists(path):
             raise FileNotFoundError(path)
 
-        capture = cv2.VideoCapture(path)
+        cap = None
+        for backend in [cv2.CAP_ANY, cv2.CAP_FFMPEG]:
+            cap = cv2.VideoCapture(path, backend)
+            if cap.isOpened():
+                break
+        if cap is None or not cap.isOpened():
+            raise ValueError(f"Cannot open video: {path}")
 
-        count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        video = np.zeros((count, height, width, 3), np.uint8)
-
-        for i in range(count):
-            out, frame = capture.read()
+        frames = []
+        while True:
+            out, frame = cap.read()
             if not out:
-                raise ValueError("Problem when reading frame #{} of {}.".format(i, path))
+                break
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-            video[i, :, :] = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        cap.release()
 
+        if not frames:
+            raise ValueError(f"No frames could be read from {path}")
+
+        video = np.stack(frames, axis=0)
         return video.transpose((3, 0, 1, 2))
+
+    def _validate_readable(self):
+        bad_indices = []
+        for i, v in enumerate(self.vnames):
+            path = os.path.join(self.root, "Videos", v)
+            try:
+                self.load_video(path)
+            except (ValueError, cv2.error, FileNotFoundError):
+                bad_indices.append(i)
+
+        if bad_indices:
+            self.vnames = [v for i, v in enumerate(self.vnames) if i not in bad_indices]
+            self.outcome = [o for i, o in enumerate(self.outcome) if i not in bad_indices]
+            print(f"Filtered {len(bad_indices)} unreadable videos "
+                  f"(remaining: {len(self.vnames)})")
 
 
 import pydicom
