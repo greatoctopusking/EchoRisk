@@ -4,17 +4,20 @@ import torch.nn as nn
 from models.uniformer import uniformer_small, uniformer_base
 
 
-class GatedFusion(nn.Module):
-    def __init__(self, dim=512):
+class MLPFusion(nn.Module):
+    def __init__(self, dim=512, hidden_dim=256):
         super().__init__()
-        self.gate = nn.Linear(dim * 2, 2)
+        self.fc1 = nn.Linear(dim * 2, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim // 2)
+        self.fc3 = nn.Linear(hidden_dim // 2, 1)
+        self.act = nn.GELU()
+        self.fc3.bias.data[0] = 55.6
 
-    def forward(self, f_a4c, f_a2c, a4c_mask, a2c_mask):
-        w = self.gate(torch.cat([f_a4c, f_a2c], dim=-1))
-        w = w.softmax(dim=-1)
-        w = w * torch.stack([a4c_mask.float(), a2c_mask.float()], dim=-1)
-        w = w / (w.sum(dim=-1, keepdim=True) + 1e-8)
-        return w[:, 0:1] * f_a4c + w[:, 1:2] * f_a2c
+    def forward(self, f_a4c, f_a2c):
+        x = torch.cat([f_a4c, f_a2c], dim=-1)
+        x = self.act(self.fc1(x))
+        x = self.act(self.fc2(x))
+        return self.fc3(x).squeeze(-1)
 
 
 class MultiModalEchoCoTr(nn.Module):
@@ -36,26 +39,18 @@ class MultiModalEchoCoTr(nn.Module):
         encoder_dim = self.encoder.embed_dim[-1]
         self.encoder.head = nn.Identity()
 
-        self.fusion = GatedFusion(dim=encoder_dim)
-        self.head = nn.Linear(encoder_dim, 1)
-        self.head.bias.data[0] = 55.6
+        self.fusion = MLPFusion(dim=encoder_dim)
 
         self.null_emb = nn.Parameter(torch.zeros(1, encoder_dim))
-
-    def _encode_view(self, video):
-        if video is None:
-            return None
-        return self.encoder(video).squeeze(-1)
 
     def forward(self, a4c_video, a2c_video, a4c_mask, a2c_mask):
         batch_size = a4c_video.shape[0]
 
-        f_a4c = self.encoder(a4c_video).squeeze(-1)
-        f_a2c = self.encoder(a2c_video).squeeze(-1)
+        f_a4c = self.encoder(a4c_video).view(batch_size, -1)
+        f_a2c = self.encoder(a2c_video).view(batch_size, -1)
 
         null = self.null_emb.expand(batch_size, -1)
         f_a4c = torch.where(a4c_mask.unsqueeze(-1), f_a4c, null)
         f_a2c = torch.where(a2c_mask.unsqueeze(-1), f_a2c, null)
 
-        fused = self.fusion(f_a4c, f_a2c, a4c_mask, a2c_mask)
-        return self.head(fused).squeeze(-1)
+        return self.fusion(f_a4c, f_a2c)
