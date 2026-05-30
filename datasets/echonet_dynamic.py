@@ -2,6 +2,7 @@ import os
 import csv
 import collections
 
+import cv2
 import numpy as np
 import torch
 import torchvision
