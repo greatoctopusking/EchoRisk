@@ -12,8 +12,7 @@ class GatedFusion(nn.Module):
     def forward(self, f_a4c, f_a2c, a4c_mask, a2c_mask):
         w = self.gate(torch.cat([f_a4c, f_a2c], dim=-1))
         w = w.softmax(dim=-1)
-        w[:, 0] = w[:, 0] * a4c_mask.float()
-        w[:, 1] = w[:, 1] * a2c_mask.float()
+        w = w * torch.stack([a4c_mask.float(), a2c_mask.float()], dim=-1)
         w = w / (w.sum(dim=-1, keepdim=True) + 1e-8)
         return w[:, 0:1] * f_a4c + w[:, 1:2] * f_a2c
 
