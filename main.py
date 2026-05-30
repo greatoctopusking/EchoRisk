@@ -16,7 +16,7 @@ def flatten_config(config_dict):
     flat = {}
     section_map = {
         'data': ['csv_train', 'csv_test', 'dicom_root', 'frames', 'frequency', 'resize', 'train_split_ratio', 'cache_dir'],
-        'model': ['model_name', 'pretrained', 'weights'],
+        'model': ['model_name', 'pretrained', 'weights', 'freeze_encoder_stages'],
         'training': ['epochs', 'batch_size', 'num_workers', 'modal_dropout'],
         'optimization': ['optimizer_name', 'lr', 'weight_decay', 'lr_scheduler', 'lr_step_period'],
         'device': ['device'],
@@ -94,6 +94,11 @@ def build_parser(defaults):
                         type=str,
                         default=defaults.get('weights'),
                         help='Path to pretrained weights')
+
+    parser.add_argument('--freeze_encoder_stages',
+                        type=int,
+                        default=defaults.get('freeze_encoder_stages', 3),
+                        help='Number of encoder stages to freeze (3=stages 1-3)')
 
     parser.add_argument('--epochs',
                         type=int,
@@ -215,6 +220,7 @@ def main():
         model_name=args.model_name,
         pretrained=args.pretrained,
         weights=args.weights,
+        freeze_encoder_stages=args.freeze_encoder_stages,
     )
 
     if device.type == "cuda":

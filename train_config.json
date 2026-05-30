@@ -17,7 +17,8 @@
     "model": {
         "model_name": "uniformer_small",
         "pretrained": false,
-        "weights": null
+        "weights": null,
+        "freeze_encoder_stages": 3
     },
     "training": {
         "epochs": 45,
@@ -28,7 +29,7 @@
     "optimization": {
         "optimizer_name": "adamW",
         "lr": 1e-4,
-        "weight_decay": 1e-4,
+        "weight_decay": 5e-4,
         "lr_scheduler": "step",
         "lr_step_period": 15
     },
