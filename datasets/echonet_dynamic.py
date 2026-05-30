@@ -167,7 +167,7 @@ class EchoNet(torchvision.datasets.VisionDataset):
         for i in range(count):
             out, frame = capture.read()
             if not out:
-                raise ValueError("Problem when reading frame #{} of {}.".format(i, filename))
+                raise ValueError("Problem when reading frame #{} of {}.".format(i, path))
 
             video[i, :, :] = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -307,11 +307,11 @@ class EchoRiskMultiModal(torchvision.datasets.VisionDataset):
         c, f, h, w = video.shape
         target_frames = min(self.frames, self.max_frames)
 
-        stride = f // target_frames if f >= target_frames else 1
-        indices = np.arange(0, target_frames * stride, stride)[:target_frames]
-
-        if len(indices) < target_frames:
-            pad_len = target_frames - len(indices)
+        if f >= target_frames:
+            indices = np.linspace(0, f - 1, target_frames, dtype=int)
+        else:
+            indices = np.arange(f)
+            pad_len = target_frames - f
             indices = np.concatenate([indices, np.full(pad_len, f - 1)])
 
         sampled = video[:, indices, :, :].astype(np.float32)
@@ -320,29 +320,39 @@ class EchoRiskMultiModal(torchvision.datasets.VisionDataset):
 
 
 def multimodal_collate_fn(batch):
+    batch_size = len(batch)
     a4c_list, a2c_list, ef_list = [], [], []
-    a4c_mask, a2c_mask = [], []
+    a4c_mask_list, a2c_mask_list = [], []
+    a4c_indices, a2c_indices = [], []
 
-    for a4c, a2c, ef in batch:
+    for i, (a4c, a2c, ef) in enumerate(batch):
         ef_list.append(ef)
-
         if a4c is not None:
             a4c_list.append(torch.from_numpy(a4c))
-            a4c_mask.append(True)
-        else:
-            a4c_mask.append(False)
+            a4c_indices.append(i)
+        a4c_mask_list.append(a4c is not None)
 
         if a2c is not None:
             a2c_list.append(torch.from_numpy(a2c))
-            a2c_mask.append(True)
-        else:
-            a2c_mask.append(False)
+            a2c_indices.append(i)
+        a2c_mask_list.append(a2c is not None)
 
-    a4c_mask = torch.tensor(a4c_mask, dtype=torch.bool)
-    a2c_mask = torch.tensor(a2c_mask, dtype=torch.bool)
-
-    a4c_tensor = torch.stack(a4c_list) if a4c_list else torch.zeros(0)
-    a2c_tensor = torch.stack(a2c_list) if a2c_list else torch.zeros(0)
+    a4c_mask = torch.tensor(a4c_mask_list, dtype=torch.bool)
+    a2c_mask = torch.tensor(a2c_mask_list, dtype=torch.bool)
     ef_tensor = torch.tensor(ef_list, dtype=torch.float32)
+
+    if a4c_list:
+        sample_shape = a4c_list[0].shape
+        a4c_tensor = torch.zeros(batch_size, *sample_shape)
+        a4c_tensor[a4c_indices] = torch.stack(a4c_list)
+    else:
+        a4c_tensor = torch.zeros(batch_size, 3, 32, 224, 224)
+
+    if a2c_list:
+        sample_shape = a2c_list[0].shape
+        a2c_tensor = torch.zeros(batch_size, *sample_shape)
+        a2c_tensor[a2c_indices] = torch.stack(a2c_list)
+    else:
+        a2c_tensor = torch.zeros(batch_size, 3, 32, 224, 224)
 
     return a4c_tensor, a2c_tensor, ef_tensor, a4c_mask, a2c_mask

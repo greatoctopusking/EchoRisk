@@ -54,14 +54,14 @@ def get_model(model_name, args):
     elif model_name == "uniformer_small":
         model = uniformer_small()
         if args.pretrained and args.weights is not None:
-            state_dict = torch.load(args.weights, map_location='cpu')
+            state_dict = torch.load(args.weights, map_location='cpu', weights_only=True)
             model.load_state_dict(state_dict)
         model.head = torch.nn.Linear(in_features=model.head.in_features, out_features=1)
         model.head.bias.data[0] = 55.6
     elif model_name == "uniformer_base":
         model = uniformer_base()
         if args.pretrained and args.weights is not None:
-            state_dict = torch.load(args.weights, map_location='cpu')
+            state_dict = torch.load(args.weights, map_location='cpu', weights_only=True)
             model.load_state_dict(state_dict)
         model.head = torch.nn.Linear(in_features=model.head.in_features, out_features=1)
         model.head.bias.data[0] = 55.6
@@ -256,7 +256,7 @@ def run_test(output, device, model, f, args):
         return
 
     if args.epochs != 0:
-        checkpoint = torch.load(os.path.join(output, "best.pt"))
+        checkpoint = torch.load(os.path.join(output, "best.pt"), weights_only=False)
         model.load_state_dict(checkpoint['state_dict'])
         f.write("Best validation loss {} from epoch {}\n".format(checkpoint["loss"], checkpoint["epoch"]))
         f.flush()

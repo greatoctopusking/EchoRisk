@@ -31,7 +31,7 @@ class MultiModalEchoCoTr(nn.Module):
             raise ValueError(f"Unknown model_name: {model_name}")
 
         if pretrained and weights is not None:
-            state_dict = torch.load(weights, map_location='cpu')
+            state_dict = torch.load(weights, map_location='cpu', weights_only=True)
             self.encoder.load_state_dict(state_dict)
 
         encoder_dim = self.encoder.embed_dim[-1]
@@ -49,15 +49,14 @@ class MultiModalEchoCoTr(nn.Module):
         return self.encoder(video).squeeze(-1)
 
     def forward(self, a4c_video, a2c_video, a4c_mask, a2c_mask):
-        batch_size = a4c_video.shape[0] if a4c_video is not None else a2c_video.shape[0]
+        batch_size = a4c_video.shape[0]
 
-        f_a4c = self._encode_view(a4c_video)
-        f_a2c = self._encode_view(a2c_video)
+        f_a4c = self.encoder(a4c_video).squeeze(-1)
+        f_a2c = self.encoder(a2c_video).squeeze(-1)
 
-        if f_a4c is None:
-            f_a4c = self.null_emb.expand(batch_size, -1)
-        if f_a2c is None:
-            f_a2c = self.null_emb.expand(batch_size, -1)
+        null = self.null_emb.expand(batch_size, -1)
+        f_a4c = torch.where(a4c_mask.unsqueeze(-1), f_a4c, null)
+        f_a2c = torch.where(a2c_mask.unsqueeze(-1), f_a2c, null)
 
         fused = self.fusion(f_a4c, f_a2c, a4c_mask, a2c_mask)
         return self.head(fused).squeeze(-1)

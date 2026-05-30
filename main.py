@@ -238,7 +238,7 @@ def main():
         epoch_resume = 0
         bestLoss = float("inf")
         try:
-            checkpoint = torch.load(os.path.join(output, "checkpoint.pt"))
+            checkpoint = torch.load(os.path.join(output, "checkpoint.pt"), weights_only=False)
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['opt_dict'])
             lr_scheduler.load_state_dict(checkpoint['scheduler_dict'])
