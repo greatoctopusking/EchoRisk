@@ -192,7 +192,8 @@ class EchoRiskMultiModal(torchvision.datasets.VisionDataset):
                  max_frames=250,
                  resize=224,
                  train_split_ratio=0.8,
-                 split_seed=42):
+                 split_seed=42,
+                 cache_dir=None):
         self.split = split
         self.mean = mean
         self.std = std
@@ -201,6 +202,7 @@ class EchoRiskMultiModal(torchvision.datasets.VisionDataset):
         self.max_frames = max_frames
         self.dicom_root = dicom_root
         self.resize_size = resize
+        self.cache_dir = cache_dir
 
         all_samples = self._load_csv(csv_path, dicom_root)
 
@@ -209,9 +211,14 @@ class EchoRiskMultiModal(torchvision.datasets.VisionDataset):
         else:
             self.samples = all_samples
 
-        self.transform = torchvision.transforms.Resize((resize, resize), antialias=True) if resize else None
+        if self.cache_dir is None:
+            self.transform = torchvision.transforms.Resize((resize, resize), antialias=True) if resize else None
+        else:
+            self.transform = None
 
-        print("{} dataset size: {} (from {} total)".format(split, len(self.samples), len(all_samples)))
+        print("{} dataset size: {} (from {} total){}".format(
+            split, len(self.samples), len(all_samples),
+            " [cached]" if cache_dir else ""))
 
     @staticmethod
     def _patient_split(all_samples, split, train_split_ratio, split_seed):
@@ -261,8 +268,12 @@ class EchoRiskMultiModal(torchvision.datasets.VisionDataset):
     def __getitem__(self, index):
         pid, tp, a4c_path, a2c_path, lvef = self.samples[index]
 
-        a4c_video = self._load_dicom(a4c_path) if a4c_path else None
-        a2c_video = self._load_dicom(a2c_path) if a2c_path else None
+        if self.cache_dir:
+            a4c_video = self._load_cached(pid, tp, "A4C") if a4c_path else None
+            a2c_video = self._load_cached(pid, tp, "A2C") if a2c_path else None
+        else:
+            a4c_video = self._load_dicom(a4c_path) if a4c_path else None
+            a2c_video = self._load_dicom(a2c_path) if a2c_path else None
 
         if a4c_video is not None:
             a4c_video = self._preprocess(a4c_video)
@@ -272,6 +283,10 @@ class EchoRiskMultiModal(torchvision.datasets.VisionDataset):
         ef = np.float32(lvef)
 
         return a4c_video, a2c_video, ef
+
+    def _load_cached(self, pid, tp, view):
+        cache_path = os.path.join(self.cache_dir, pid, f"{tp}_{view}.pt")
+        return torch.load(cache_path, map_location='cpu', weights_only=True).numpy()
 
     def _load_dicom(self, path):
         ds = pydicom.dcmread(path)

@@ -11,7 +11,8 @@
         "frames": 32,
         "frequency": 2,
         "resize": 224,
-        "train_split_ratio": 0.8
+        "train_split_ratio": 0.8,
+        "cache_dir": null
     },
     "model": {
         "model_name": "uniformer_small",

@@ -15,7 +15,7 @@ from utils import get_optimizer, get_lr_scheduler, get_mean_and_sd, run_train, r
 def flatten_config(config_dict):
     flat = {}
     section_map = {
-        'data': ['csv_train', 'csv_test', 'dicom_root', 'frames', 'frequency', 'resize', 'train_split_ratio'],
+        'data': ['csv_train', 'csv_test', 'dicom_root', 'frames', 'frequency', 'resize', 'train_split_ratio', 'cache_dir'],
         'model': ['model_name', 'pretrained', 'weights'],
         'training': ['epochs', 'batch_size', 'num_workers', 'modal_dropout'],
         'optimization': ['optimizer_name', 'lr', 'weight_decay', 'lr_scheduler', 'lr_step_period'],
@@ -161,6 +161,11 @@ def build_parser(defaults):
                         default=defaults.get('train_split_ratio', 0.8),
                         help='Ratio of training data (by patient), rest used as val')
 
+    parser.add_argument('--cache_dir',
+                        type=str,
+                        default=defaults.get('cache_dir'),
+                        help='Path to preprocessed .pt cache dir (optional)')
+
     parser.add_argument('--device',
                         type=str,
                         default=defaults.get('device'),
@@ -228,6 +233,7 @@ def main():
         resize=args.resize,
         train_split_ratio=args.train_split_ratio,
         split_seed=args.seed,
+        cache_dir=args.cache_dir,
     )
     args.mean, args.std = get_mean_and_sd(dummy_ds)
 

@@ -16,7 +16,7 @@ def set_seed(s):
     torch.manual_seed(s)
     torch.cuda.manual_seed_all(s)
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.benchmark = True
     np.random.seed(s)
     random.seed(s)
     os.environ['PYTHONHASHSEED'] = str(s)
@@ -120,6 +120,7 @@ def run_epoch(model, dataloader, train, optimizer, device, modal_dropout=0.0):
 
     total_loss, samples = 0, 0
     y, yhat = [], []
+    scaler = torch.cuda.amp.GradScaler(enabled=train)
 
     with torch.set_grad_enabled(train):
         with tqdm.tqdm(total=len(dataloader)) as progressbar:
@@ -155,7 +156,8 @@ def run_epoch(model, dataloader, train, optimizer, device, modal_dropout=0.0):
                     mask_a4c = a4c_mask
                     mask_a2c = a2c_mask
 
-                outputs = model(a4c_video, a2c_video, mask_a4c, mask_a2c)
+                with torch.cuda.amp.autocast(enabled=train):
+                    outputs = model(a4c_video, a2c_video, mask_a4c, mask_a2c)
 
                 y.append(ef.cpu().numpy())
                 yhat.append(outputs.view(-1).to("cpu").detach().numpy())
@@ -164,8 +166,9 @@ def run_epoch(model, dataloader, train, optimizer, device, modal_dropout=0.0):
 
                 if train:
                     optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
 
                 total_loss += loss.item() * ef.size(0)
                 samples += ef.size(0)
@@ -190,6 +193,7 @@ def run_train(output, device, model, optimizer, lr_scheduler, bestLoss, epoch_re
         resize=args.resize,
         train_split_ratio=args.train_split_ratio,
         split_seed=args.seed,
+        cache_dir=getattr(args, 'cache_dir', None),
     )
     train_ds = EchoRiskMultiModal(split="train", **kwargs)
     val_ds = EchoRiskMultiModal(split="val", **kwargs)
@@ -271,6 +275,7 @@ def run_test(output, device, model, f, args):
         frames=args.frames,
         frequency=args.frequency,
         resize=args.resize,
+        cache_dir=getattr(args, 'cache_dir', None),
     )
     dataloader = torch.utils.data.DataLoader(
         dataset,
