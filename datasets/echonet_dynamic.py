@@ -184,6 +184,18 @@ class EchoNet(torchvision.datasets.VisionDataset):
         return video.transpose((3, 0, 1, 2))
 
     def _validate_readable(self):
+        cache_path = os.path.join(self.root, f".validated_{self.split.upper()}.txt")
+
+        if os.path.exists(cache_path):
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                valid_set = set(line.strip() for line in f if line.strip())
+            keep = [i for i, v in enumerate(self.vnames) if v in valid_set]
+            if len(keep) < len(self.vnames):
+                self.vnames = [self.vnames[i] for i in keep]
+                self.outcome = [self.outcome[i] for i in keep]
+            print(f"Loaded cached validation: {len(self.vnames)} valid videos from {cache_path}")
+            return
+
         bad_indices = []
         for i, v in enumerate(tqdm.tqdm(self.vnames, desc="Validating videos")):
             path = os.path.join(self.root, "Videos", v)
@@ -205,6 +217,11 @@ class EchoNet(torchvision.datasets.VisionDataset):
             self.outcome = [o for i, o in enumerate(self.outcome) if i not in bad_indices]
             print(f"\nFiltered {len(bad_indices)} unreadable videos "
                   f"(remaining: {len(self.vnames)})")
+
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            for v in self.vnames:
+                f.write(v + '\n')
+        print(f"Cached validation results to {cache_path}")
 
 
 import pydicom
