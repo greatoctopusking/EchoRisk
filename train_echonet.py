@@ -1,5 +1,6 @@
 import os
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
+os.environ['GST_DEBUG'] = '0'
 
 import json
 import argparse
@@ -117,11 +118,23 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt_cfg.get('lr_step_period', 15))
 
+    start_epoch = 0
     best_loss = float('inf')
-    with open(os.path.join(output_dir, 'log.csv'), 'a') as log:
-        log.write("epoch,phase,loss,r2,time,n_samples\n")
+    checkpoint_path = os.path.join(output_dir, "checkpoint.pt")
+    if os.path.exists(checkpoint_path):
+        ckpt = torch.load(checkpoint_path, weights_only=False, map_location='cpu')
+        model.load_state_dict(ckpt['state_dict'])
+        optimizer.load_state_dict(ckpt['opt_dict'])
+        scheduler.load_state_dict(ckpt['scheduler_dict'])
+        start_epoch = ckpt['epoch'] + 1
+        best_loss = ckpt['best_loss']
+        print(f"Resumed from epoch {start_epoch}, best_loss={best_loss:.4f}")
 
-        for epoch in range(epochs):
+    with open(os.path.join(output_dir, 'log.csv'), 'a') as log:
+        if start_epoch == 0:
+            log.write("epoch,phase,loss,r2,time,n_samples\n")
+
+        for epoch in range(start_epoch, epochs):
             print(f"\nEpoch #{epoch}")
             for phase, loader in [('train', train_loader), ('val', val_loader)]:
                 t0 = time.time()
@@ -136,6 +149,8 @@ def main():
             save_dict = {
                 'epoch': epoch,
                 'state_dict': model.state_dict(),
+                'opt_dict': optimizer.state_dict(),
+                'scheduler_dict': scheduler.state_dict(),
                 'best_loss': best_loss,
                 'loss': loss,
                 'r2': r2,

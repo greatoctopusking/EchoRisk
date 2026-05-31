@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import torch
 import torchvision
+import tqdm
 
 
 def _defaultdict_of_lists():
@@ -184,17 +185,25 @@ class EchoNet(torchvision.datasets.VisionDataset):
 
     def _validate_readable(self):
         bad_indices = []
-        for i, v in enumerate(self.vnames):
+        for i, v in enumerate(tqdm.tqdm(self.vnames, desc="Validating videos")):
             path = os.path.join(self.root, "Videos", v)
-            try:
-                self.load_video(path)
-            except (ValueError, cv2.error, FileNotFoundError):
+            cap = None
+            for backend in [cv2.CAP_ANY, cv2.CAP_FFMPEG]:
+                cap = cv2.VideoCapture(path, backend)
+                if cap.isOpened():
+                    break
+            if cap is None or not cap.isOpened():
+                bad_indices.append(i)
+                continue
+            out, _ = cap.read()
+            cap.release()
+            if not out:
                 bad_indices.append(i)
 
         if bad_indices:
             self.vnames = [v for i, v in enumerate(self.vnames) if i not in bad_indices]
             self.outcome = [o for i, o in enumerate(self.outcome) if i not in bad_indices]
-            print(f"Filtered {len(bad_indices)} unreadable videos "
+            print(f"\nFiltered {len(bad_indices)} unreadable videos "
                   f"(remaining: {len(self.vnames)})")
 
 

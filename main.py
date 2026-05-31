@@ -257,9 +257,10 @@ def main():
         split_seed=args.seed,
         cache_dir=args.cache_dir,
     )
-    args.mean, args.std = get_mean_and_sd(dummy_ds)
+    args.mean = np.float32(0.)
+    args.std = np.float32(1.)
 
-    print("Dataset mean: ", args.mean)
+    print("Dataset mean: ", args.mean, " (Phase 1 compatible, no normalization)")
     print("Dataset std: ", args.std)
 
     with open(os.path.join(output, "log.csv"), "a") as f:
