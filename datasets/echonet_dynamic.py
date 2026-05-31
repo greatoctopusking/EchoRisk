@@ -160,22 +160,40 @@ class EchoNet(torchvision.datasets.VisionDataset):
         if not os.path.exists(path):
             raise FileNotFoundError(path)
 
-        cap = None
-        for backend in [cv2.CAP_ANY, cv2.CAP_FFMPEG]:
+        frames = None
+        for backend in [cv2.CAP_FFMPEG, cv2.CAP_ANY]:
             cap = cv2.VideoCapture(path, backend)
-            if cap.isOpened():
-                break
-        if cap is None or not cap.isOpened():
-            raise ValueError(f"Cannot open video: {path}")
-
-        frames = []
-        while True:
-            out, frame = cap.read()
+            if not cap.isOpened():
+                try: cap.release()
+                except cv2.error: pass
+                continue
+            try:
+                out, _ = cap.read()
+            except cv2.error:
+                out = False
             if not out:
-                break
-            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                try: cap.release()
+                except cv2.error: pass
+                continue
 
-        cap.release()
+            try:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            except cv2.error:
+                pass
+
+            frames = []
+            while True:
+                try:
+                    out, frame = cap.read()
+                except cv2.error:
+                    break
+                if not out:
+                    break
+                frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+            try: cap.release()
+            except cv2.error: pass
+            break
 
         if not frames:
             raise ValueError(f"No frames could be read from {path}")
@@ -200,15 +218,21 @@ class EchoNet(torchvision.datasets.VisionDataset):
         for i, v in enumerate(tqdm.tqdm(self.vnames, desc="Validating videos")):
             path = os.path.join(self.root, "Videos", v)
             cap = None
-            for backend in [cv2.CAP_ANY, cv2.CAP_FFMPEG]:
+            for backend in [cv2.CAP_FFMPEG, cv2.CAP_ANY]:
                 cap = cv2.VideoCapture(path, backend)
                 if cap.isOpened():
                     break
             if cap is None or not cap.isOpened():
                 bad_indices.append(i)
                 continue
-            out, _ = cap.read()
-            cap.release()
+            try:
+                out, _ = cap.read()
+            except cv2.error:
+                out = False
+            try:
+                cap.release()
+            except cv2.error:
+                pass
             if not out:
                 bad_indices.append(i)
 
