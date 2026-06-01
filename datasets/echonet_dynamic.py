@@ -2,6 +2,8 @@ import os
 import csv
 import collections
 import random
+import sys
+import traceback
 
 import cv2
 import numpy as np
@@ -178,7 +180,8 @@ class EchoNet(torchvision.datasets.VisionDataset):
                 continue
             try:
                 out, _ = cap.read()
-            except cv2.error:
+            except cv2.error as e:
+                print(f"[load_video] cap.read() test exception for {path}: {e}", file=sys.stderr, flush=True)
                 out = False
             if not out:
                 try: cap.release()
@@ -194,7 +197,8 @@ class EchoNet(torchvision.datasets.VisionDataset):
             while True:
                 try:
                     out, frame = cap.read()
-                except cv2.error:
+                except cv2.error as e:
+                    print(f"[load_video] cap.read() loop exception for {path}: {e}", file=sys.stderr, flush=True)
                     break
                 if not out:
                     break
@@ -205,11 +209,18 @@ class EchoNet(torchvision.datasets.VisionDataset):
             break
 
         if not frames:
-            print(f"Warning: No frames could be read from {path}, skipping")
+            print(f"[load_video] FAILED: {path} (no frames)", file=sys.stderr, flush=True)
             return None
 
-        video = np.stack(frames, axis=0)
-        return video.transpose((3, 0, 1, 2))
+        try:
+            video = np.stack(frames, axis=0)
+            video = video.transpose((3, 0, 1, 2))
+        except Exception as e:
+            print(f"[load_video] stack/transpose exception for {path}: {e}", file=sys.stderr, flush=True)
+            traceback.print_exc(file=sys.stderr)
+            return None
+
+        return video
 
 
 import pydicom

@@ -5,6 +5,8 @@ os.environ['GST_DEBUG'] = '0'
 import json
 import argparse
 import time
+import sys
+import ctypes
 
 import numpy as np
 import sklearn.metrics
@@ -14,6 +16,12 @@ import tqdm
 from models.uniformer import uniformer_small, uniformer_base
 from datasets.echonet_dynamic import EchoNet
 from utils import set_seed, get_optimizer, get_lr_scheduler, bootstrap_metric
+
+
+def worker_init_fn(worker_id):
+    print(f"[worker_init] worker {worker_id} started, initializing COM...", file=sys.stderr, flush=True)
+    hr = ctypes.windll.ole32.CoInitializeEx(None, 0)
+    print(f"[worker_init] worker {worker_id} CoInitializeEx returned {hr}", file=sys.stderr, flush=True)
 
 
 def get_model(model_name, pretrained, weights_path):
@@ -106,9 +114,9 @@ def main():
 
     print(f"Train: {len(train_ds)}, Val: {len(val_ds)}")
 
-    dataloader_kwargs = dict(batch_size=batch_size, num_workers=num_workers, pin_memory=True)
+    dataloader_kwargs = dict(batch_size=batch_size, num_workers=num_workers, pin_memory=True, worker_init_fn=worker_init_fn)
     train_loader = torch.utils.data.DataLoader(train_ds, shuffle=True, drop_last=True, **dataloader_kwargs)
-    val_loader = torch.utils.data.DataLoader(val_ds, shuffle=False, **dataloader_kwargs)
+    val_loader = torch.utils.data.DataLoader(val_ds, shuffle=False, batch_size=batch_size, num_workers=0, pin_memory=True)
 
     model = get_model(model_name, pretrained, weights_path)
     model.to(device)
