@@ -1,12 +1,13 @@
 import os
 import csv
 import collections
+import random
 
 import cv2
 import numpy as np
 import torch
 import torchvision
-import tqdm
+
 
 
 def _defaultdict_of_lists():
@@ -44,8 +45,6 @@ class EchoNet(torchvision.datasets.VisionDataset):
         self.read_volumetracings()
 
         self.filter_videos()
-
-        self._validate_readable()
 
         print("{} dataset size: {}".format(split, len(self.vnames)))
 
@@ -99,9 +98,19 @@ class EchoNet(torchvision.datasets.VisionDataset):
         self.outcome = [f for (f, k) in zip(self.outcome, videos_to_keep) if k]
 
     def __getitem__(self, index):
-        video = os.path.join(self.root, "Videos", self.vnames[index])
+        max_retries = 10
+        for attempt in range(max_retries):
+            video_path = os.path.join(self.root, "Videos", self.vnames[index])
+            video = self.load_video(video_path)
+            if video is not None:
+                break
+            print(f"Warning: retrying ({attempt+1}/{max_retries}), "
+                  f"failed: {self.vnames[index]}")
+            index = random.randrange(len(self.vnames))
+        else:
+            raise RuntimeError(f"Failed to load any video after {max_retries} retries")
 
-        video = self.load_video(video).astype(np.float32)
+        video = video.astype(np.float32)
 
         video = self.normalize_video(video)
 
@@ -161,7 +170,7 @@ class EchoNet(torchvision.datasets.VisionDataset):
             raise FileNotFoundError(path)
 
         frames = None
-        for backend in [cv2.CAP_FFMPEG, cv2.CAP_ANY]:
+        for backend in [cv2.CAP_MSMF, cv2.CAP_ANY]:
             cap = cv2.VideoCapture(path, backend)
             if not cap.isOpened():
                 try: cap.release()
@@ -196,56 +205,11 @@ class EchoNet(torchvision.datasets.VisionDataset):
             break
 
         if not frames:
-            raise ValueError(f"No frames could be read from {path}")
+            print(f"Warning: No frames could be read from {path}, skipping")
+            return None
 
         video = np.stack(frames, axis=0)
         return video.transpose((3, 0, 1, 2))
-
-    def _validate_readable(self):
-        cache_path = os.path.join(self.root, f".validated_{self.split.upper()}.txt")
-
-        if os.path.exists(cache_path):
-            with open(cache_path, 'r', encoding='utf-8') as f:
-                valid_set = set(line.strip() for line in f if line.strip())
-            keep = [i for i, v in enumerate(self.vnames) if v in valid_set]
-            if len(keep) < len(self.vnames):
-                self.vnames = [self.vnames[i] for i in keep]
-                self.outcome = [self.outcome[i] for i in keep]
-            print(f"Loaded cached validation: {len(self.vnames)} valid videos from {cache_path}")
-            return
-
-        bad_indices = []
-        for i, v in enumerate(tqdm.tqdm(self.vnames, desc="Validating videos")):
-            path = os.path.join(self.root, "Videos", v)
-            cap = None
-            for backend in [cv2.CAP_FFMPEG, cv2.CAP_ANY]:
-                cap = cv2.VideoCapture(path, backend)
-                if cap.isOpened():
-                    break
-            if cap is None or not cap.isOpened():
-                bad_indices.append(i)
-                continue
-            try:
-                out, _ = cap.read()
-            except cv2.error:
-                out = False
-            try:
-                cap.release()
-            except cv2.error:
-                pass
-            if not out:
-                bad_indices.append(i)
-
-        if bad_indices:
-            self.vnames = [v for i, v in enumerate(self.vnames) if i not in bad_indices]
-            self.outcome = [o for i, o in enumerate(self.outcome) if i not in bad_indices]
-            print(f"\nFiltered {len(bad_indices)} unreadable videos "
-                  f"(remaining: {len(self.vnames)})")
-
-        with open(cache_path, 'w', encoding='utf-8') as f:
-            for v in self.vnames:
-                f.write(v + '\n')
-        print(f"Cached validation results to {cache_path}")
 
 
 import pydicom
