@@ -244,7 +244,9 @@ def main():
     model.to(device)
 
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
-    model.load_state_dict(checkpoint['state_dict'])
+    state_dict = checkpoint['state_dict']
+    state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+    model.load_state_dict(state_dict, strict=False)
     print(f"Loaded checkpoint: {args.checkpoint} (epoch {checkpoint.get('epoch', '?')})")
 
     y, yhat = run_eval_inference(model, dataloader, device)
