@@ -129,12 +129,12 @@ class EchoNet(torchvision.datasets.VisionDataset):
         return len(self.vnames)
 
     def normalize_video(self, video):
-        if isinstance(self.mean, (float, int)):
+        if isinstance(self.mean, (float, int, np.floating, np.integer)):
             video -= self.mean
         else:
             video -= self.mean.reshape(3, 1, 1, 1)
 
-        if isinstance(self.std, (float, int)):
+        if isinstance(self.std, (float, int, np.floating, np.integer)):
             video /= self.std
         else:
             video /= self.std.reshape(3, 1, 1, 1)
@@ -355,12 +355,12 @@ class EchoRiskMultiModal(torchvision.datasets.VisionDataset):
         return video
 
     def _normalize(self, video):
-        if isinstance(self.mean, (float, int)):
+        if isinstance(self.mean, (float, int, np.floating, np.integer)):
             video -= self.mean
         else:
             video -= self.mean.reshape(3, 1, 1, 1)
 
-        if isinstance(self.std, (float, int)):
+        if isinstance(self.std, (float, int, np.floating, np.integer)):
             video /= self.std
         else:
             video /= self.std.reshape(3, 1, 1, 1)
