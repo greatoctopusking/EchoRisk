@@ -4,11 +4,12 @@
         "seed": 0
     },
     "data": {
-        "csv_val": null,
+        "csv_val": "D:/Task1/labels/task1_val.csv",
         "dicom_root": null,
         "frames": 36,
         "frequency": 4,
-        "resize": 112
+        "resize": 112,
+        "cache_dir": "D:/EchoRisk/cache"
     },
     "model": {
         "model_name": "uniformer_small",

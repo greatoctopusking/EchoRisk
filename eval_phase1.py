@@ -35,6 +35,7 @@ def parse_args():
     a.frames = data.get('frames', 36)
     a.frequency = data.get('frequency', 4)
     a.resize = data.get('resize', 112)
+    a.cache_dir = data.get('cache_dir')
 
     model_cfg = cfg.get('model', {})
     a.model_name = model_cfg.get('model_name', 'uniformer_small')
@@ -58,12 +59,13 @@ def parse_args():
 
 
 class SingleViewDataset(torch.utils.data.Dataset):
-    def __init__(self, csv_path, dicom_root, frames=36, frequency=4, resize=112):
+    def __init__(self, csv_path, dicom_root, frames=36, frequency=4, resize=112, cache_dir=None):
         self.frames = frames
         self.frequency = frequency
         self.resize_size = resize
+        self.cache_dir = cache_dir
         self.samples = []
-        self.transform = torchvision.transforms.Resize((resize, resize), antialias=True)
+        self.transform = torchvision.transforms.Resize((resize, resize), antialias=True) if cache_dir is None else None
 
         with open(csv_path, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
@@ -83,16 +85,28 @@ class SingleViewDataset(torch.utils.data.Dataset):
                         continue
                     self.samples.append((pid, tp, view_name, dcm_path, lvef))
 
-        print(f"Loaded {len(self.samples)} single-view samples from {csv_path}")
+        print(f"Loaded {len(self.samples)} single-view samples from {csv_path}"
+              + (f" [cached at {cache_dir}]" if cache_dir else ""))
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
         pid, tp, view, dcm_path, lvef = self.samples[idx]
-        video = self._load_dicom(dcm_path)
+        if self.cache_dir is not None:
+            video = self._load_cached(pid, tp, view)
+            if video is None:
+                video = self._load_dicom(dcm_path)
+        else:
+            video = self._load_dicom(dcm_path)
         video = self._preprocess(video)
         return video, np.float32(lvef), pid, tp, view
+
+    def _load_cached(self, pid, tp, view):
+        cache_path = os.path.join(self.cache_dir, pid, f"{tp}_{view}.pt")
+        if not os.path.exists(cache_path):
+            return None
+        return torch.load(cache_path, map_location='cpu', weights_only=True).numpy()
 
     def _load_dicom(self, path):
         ds = pydicom.dcmread(path)
@@ -102,9 +116,10 @@ class SingleViewDataset(torch.utils.data.Dataset):
         return video
 
     def _preprocess(self, video):
-        video = torch.from_numpy(video)
-        video = self.transform(video)
-        video = video.numpy()
+        if self.transform is not None:
+            video = torch.from_numpy(video)
+            video = self.transform(video)
+            video = video.numpy()
         video = self._sample_frames(video)
         return video
 
@@ -281,6 +296,7 @@ def main():
         frames=args.frames,
         frequency=args.frequency,
         resize=args.resize,
+        cache_dir=args.cache_dir,
     )
 
     dataloader = torch.utils.data.DataLoader(
