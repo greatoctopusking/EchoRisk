@@ -125,7 +125,7 @@ class SingleViewDataset(torch.utils.data.Dataset):
 
     def _sample_frames(self, video):
         c, f, h, w = video.shape
-        target_frames = min(self.frames, f)
+        target_frames = self.frames
 
         if f >= target_frames:
             indices = np.linspace(0, f - 1, target_frames, dtype=int)
