@@ -236,16 +236,23 @@ def main():
         collate_fn=multimodal_collate_fn,
     )
 
+    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    state_dict = checkpoint['state_dict']
+    state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+
+    fusion_type = "gated"
+    if any("concat_proj" in k for k in state_dict):
+        fusion_type = "fusionblock"
+    print(f"Detected fusion_type: {fusion_type}")
+
     model = MultiModalEchoCoTr(
         model_name=args.model_name,
         pretrained=False,
         weights=None,
+        fusion_type=fusion_type,
     )
     model.to(device)
 
-    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
-    state_dict = checkpoint['state_dict']
-    state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
     model.load_state_dict(state_dict, strict=False)
     print(f"Loaded checkpoint: {args.checkpoint} (epoch {checkpoint.get('epoch', '?')})")
 
